@@ -5,6 +5,7 @@ metadata:
 spec:
   ports:
   - port: 3600
+    targetPort: 3600
   selector:
     app: backend
-  type: loadbalancer
+  type: LoadBalancer
