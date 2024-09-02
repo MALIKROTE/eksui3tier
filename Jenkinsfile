@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         EKS_CLUSTER_NAME = "my-eks-cluster"
-        AWS_REGION = "us-west-2"
+        AWS_REGION = "ap-south-1"
         DOCKER_HUB_REPO = 'malikdrote'
         DOCKER_HUB_CREDENTIALS = 'docker-hub-credentials'
     }
@@ -38,6 +38,7 @@ pipeline {
                 script {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                         sh '''
+                            aws --version
                             aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                             aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                             aws configure set default.region $AWS_REGION
