@@ -72,8 +72,7 @@ pipeline {
                         kubectl apply -f k8s/backend-service.yml
                         kubectl apply -f k8s/mysql-service.yml
 
-                        kubectl rollout status deployment/frontend
-                        kubectl rollout status deployment/backend
+                        kubectl get all
 
                         kubectl get services
                     '''
