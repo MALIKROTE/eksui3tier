@@ -7,4 +7,4 @@ spec:
   - port: 8080
   selector:
     app: frontend
-  type: NodePort
+  type: LoadBalancer
