@@ -1,33 +1,39 @@
 pipeline {
     agent any
     environment {
-        MINIKUBE_VERSION = "v1.33.1"
-        KUBECTL_VERSION = "v1.25.0"
+        EKS_CLUSTER_NAME = "my-eks-cluster"
+        AWS_REGION = "us-west-2"
         DOCKER_HUB_REPO = 'malikdrote'
         DOCKER_HUB_CREDENTIALS = 'docker-hub-credentials'
     }
     stages {
-        stage('Install Minikube and Dependencies') {
+        stage('Install AWS CLI and Kubectl') {
             steps {
                 script {
                     sh '''
-                        curl -Lo minikube https://storage.googleapis.com/minikube/releases/${MINIKUBE_VERSION}/minikube-linux-amd64
-                        chmod +x minikube
-                        sudo mv minikube /usr/local/bin/
+                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        unzip awscliv2.zip
+                        sudo ./aws/install
                         
-                        curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl
+                        curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         sudo mv kubectl /usr/local/bin/
                     '''
                 }
             }
         }
-        stage('Start Minikube') {
+        stage('Configure AWS CLI and Update Kubeconfig') {
             steps {
                 script {
-                    sh '''
-                        minikube start --driver=docker
-                    '''
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                        sh '''
+                            aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+                            aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+                            aws configure set default.region $AWS_REGION
+                            
+                            aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
+                        '''
+                    }
                 }
             }
         }
@@ -43,14 +49,10 @@ pipeline {
                 }
             }
         }
-        stage('Deploy to Minikube') {
+        stage('Deploy to EKS') {
             steps {
                 script {
                     sh '''
-                        # Use Minikube's Docker environment
-                        eval $(minikube -p minikube docker-env)
-                        
-                        # Apply Kubernetes manifests
                         kubectl apply -f k8s/mysql-deployment.yml
                         kubectl apply -f k8s/frontend-deployment.yml
                         kubectl apply -f k8s/backend-deployment.yml
@@ -58,11 +60,9 @@ pipeline {
                         kubectl apply -f k8s/backend-service.yml
                         kubectl apply -f k8s/mysql-service.yml
 
-                        # Wait for the deployments to be ready
                         kubectl rollout status deployment/frontend
                         kubectl rollout status deployment/backend
 
-                        # Wait for services to be available
                         kubectl get services
                     '''
                 }
@@ -71,13 +71,11 @@ pipeline {
         stage('Access Application') {
             steps {
                 script {
-                    
-                    def minikubeIp = sh(script: 'minikube ip', returnStdout: true).trim()
-                    def frontendPort = sh(script: 'kubectl get service frontend-service -o jsonpath="{.spec.ports[0].nodePort}"', returnStdout: true).trim()
-                    def backendPort = sh(script: 'kubectl get service backend-service -o jsonpath="{.spec.ports[0].nodePort}"', returnStdout: true).trim()
-                    
-                    echo "Frontend URL: http://${minikubeIp}:${frontendPort}"
-                    echo "Backend URL: http://${minikubeIp}:${backendPort}"
+                    def frontendUrl = sh(script: 'kubectl get service frontend-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"', returnStdout: true).trim()
+                    def backendUrl = sh(script: 'kubectl get service backend-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"', returnStdout: true).trim()
+
+                    echo "Frontend URL: http://${frontendUrl}"
+                    echo "Backend URL: http://${backendUrl}"
                 }
             }
         }
